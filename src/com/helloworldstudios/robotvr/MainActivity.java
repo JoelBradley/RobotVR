@@ -24,6 +24,8 @@ import com.google.vrtoolkit.cardboard.CardboardView;
 import com.google.vrtoolkit.cardboard.EyeTransform;
 import com.google.vrtoolkit.cardboard.HeadTransform;
 import com.google.vrtoolkit.cardboard.Viewport;
+import com.helloworldstudios.robotvr.net.GameServer;
+import com.helloworldstudios.robotvr.util.Camera;
 
 /**
  * A Cardboard sample application.
@@ -81,6 +83,10 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private Vibrator mVibrator;
 
     private CardboardOverlayView mOverlayView;
+    
+    public Camera camera;
+    
+    private GameServer server;
 
     /**
      * Converts a raw text file, saved as a resource, into an OpenGL ES shader
@@ -150,6 +156,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         mOverlayView = (CardboardOverlayView) findViewById(R.id.overlay);
         mOverlayView.show3DToast("Pull the magnet when you find an object.");
+        camera = new Camera();
+        server = new GameServer(this);
+        server.start();
     }
 
     @Override
@@ -240,7 +249,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
      * @param resId The resource ID of the raw text file about to be turned into a shader.
      * @return
      */
-    private String readRawTextFile(int resId) {
+    public String readRawTextFile(int resId) {
         InputStream inputStream = getResources().openRawResource(resId);
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
@@ -274,10 +283,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         
 
         // Build the camera matrix and apply it to the ModelView.
-        Matrix.setLookAtM(mCamera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-
+        Matrix.setLookAtM(mCamera, 0, 0, 0, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+        Matrix.translateM(mCamera, 0, camera.pos.x, -1, camera.pos.y);
         headTransform.getHeadView(mHeadView, 0);
-
         checkGLError("onReadyToDraw");
     }
 
