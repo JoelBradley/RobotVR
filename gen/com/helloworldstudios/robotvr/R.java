@@ -46,6 +46,7 @@ public final class R {
         public static final int simple_image_fragment=0x7f040006;
         public static final int simple_image_vertex=0x7f040007;
         public static final int simple_vertex=0x7f040008;
+        public static final int wall=0x7f040009;
     }
     public static final class string {
         public static final int action_settings=0x7f060002;

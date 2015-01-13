@@ -40,14 +40,12 @@ public class GameServer extends Thread {
     private void parsePacket(byte[] data, InetAddress address, int port) {
         String message = new String(data).trim();
         String[] m = message.split(",");
-        int x = Integer.parseInt(m[0]);
-        int y = Integer.parseInt(m[1]);
-        game.camera.pos.x =x;
-        game.camera.pos.y =y;
-//        if(x>0)game.camera.pos.x+=0.3125f;
-//        if(x<0)game.camera.pos.x-=0.3125f;
-//        if(y>0)game.camera.pos.y+=0.3125f;
-//        if(y<0)game.camera.pos.y-=0.3125f;
+       // Log.d("net",message);
+        double x = Double.parseDouble(m[0]);
+        double y = Double.parseDouble(m[1]);
+        game.camera.pos.x =(float) (x/32);
+        game.camera.pos.y =(float) (y/32)+0.72f;// the value is to translate the 2d location of the robot into an approximate 3D one
+
        
     }
 

@@ -13,7 +13,10 @@ import java.nio.FloatBuffer;
 import javax.microedition.khronos.egl.EGLConfig;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.opengl.GLES20;
+import android.opengl.GLUtils;
 import android.opengl.Matrix;
 import android.os.Bundle;
 import android.os.Vibrator;
@@ -56,6 +59,19 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     public FloatBuffer mCubeColors;
     public FloatBuffer mCubeFoundColors;
     public FloatBuffer mCubeNormals;
+    public FloatBuffer mCubeTextureCoordinates;
+     
+    /** This will be used to pass in the texture. */
+    public int mTextureUniformHandle;
+     
+    /** This will be used to pass in model texture coordinate information. */
+    public int mTextureCoordinateHandle;
+     
+    /** Size of the texture coordinate data in elements. */
+    public final int mTextureCoordinateDataSize = 2;
+     
+    /** This is a handle to our texture data. */
+    public int mTextureDataHandle;
 
     public int mGlProgram;
     public int mPositionParam;
@@ -77,7 +93,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float[] mModelFloor;
 
     private int mScore = 0;
-    private float mObjectDistance = 12f;
+   
     private float mFloorDepth = 20f;
 
     private Vibrator mVibrator;
@@ -155,7 +171,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
 
         mOverlayView = (CardboardOverlayView) findViewById(R.id.overlay);
-        mOverlayView.show3DToast("Pull the magnet when you find an object.");
+        mOverlayView.show3DToast("Look through the eyes of the robot!");
         camera = new Camera();
         server = new GameServer(this);
         server.start();
@@ -204,6 +220,10 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         mCubeNormals = bbNormals.asFloatBuffer();
         mCubeNormals.put(DATA.CUBE_NORMALS);
         mCubeNormals.position(0);
+        
+        mCubeTextureCoordinates = ByteBuffer.allocateDirect(DATA.CUBE_TEXCOORDS.length * 4)
+        		.order(ByteOrder.nativeOrder()).asFloatBuffer();
+        		mCubeTextureCoordinates.put(DATA.CUBE_TEXCOORDS).position(0);
 
         // make a floor
         ByteBuffer bbFloorVertices = ByteBuffer.allocateDirect(DATA.FLOOR_COORDS.length * 4);
@@ -236,10 +256,10 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         // Object first appears directly in front of user
         Matrix.setIdentityM(mModelCube, 0);
-        Matrix.translateM(mModelCube, 0, 0, 0, -mObjectDistance);
+        
 
         Matrix.setIdentityM(mModelFloor, 0);
-        Matrix.translateM(mModelFloor, 0, 0, -mFloorDepth, 0); // Floor appears below user
+        Matrix.translateM(mModelFloor, 0, 0, 0, 0);
 
         checkGLError("onSurfaceCreated");
     }
@@ -265,7 +285,44 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         }
         return "";
     }
-
+    
+    public static int loadTexture(final Context context, final int resourceId)
+    {
+        final int[] textureHandle = new int[1];
+     
+        GLES20.glGenTextures(1, textureHandle, 0);
+     
+        if (textureHandle[0] != 0)
+        {
+            final BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inScaled = false;   // No pre-scaling
+     
+            // Read in the resource
+            final Bitmap bitmap = BitmapFactory.decodeResource(context.getResources(), resourceId, options);
+     
+            // Bind to the texture in OpenGL
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHandle[0]);
+     
+            // Set filtering
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+     
+            // Load the bitmap into the bound texture.
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
+     
+            // Recycle the bitmap, since its data has been loaded into OpenGL.
+            bitmap.recycle();
+        }
+     
+        if (textureHandle[0] == 0)
+        {
+            throw new RuntimeException("Error loading texture.");
+        }
+     
+        return textureHandle[0];
+    }
+    
+    
     /**
      * Prepares OpenGL ES before we draw a frame.
      * @param headTransform The head transformation in the new frame.
@@ -301,7 +358,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         mPositionParam = GLES20.glGetAttribLocation(mGlProgram, "a_Position");
         mNormalParam = GLES20.glGetAttribLocation(mGlProgram, "a_Normal");
         mColorParam = GLES20.glGetAttribLocation(mGlProgram, "a_Color");
-
+        mTextureUniformHandle = GLES20.glGetUniformLocation(mGlProgram, "u_Texture");
+        mTextureCoordinateHandle = GLES20.glGetAttribLocation(mGlProgram, "a_TexCoordinate");
+        
         GLES20.glEnableVertexAttribArray(mPositionParam);
         GLES20.glEnableVertexAttribArray(mNormalParam);
         GLES20.glEnableVertexAttribArray(mColorParam);
@@ -366,41 +425,16 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         if (isLookingAtObject()) {
             mScore++;
-            mOverlayView.show3DToast("Found it! Look around for another one.\nScore = " + mScore);
-            hideObject();
+            //mOverlayView.show3DToast("Found it! Look around for another one.\nScore = " + mScore);
+           
         } else {
-            mOverlayView.show3DToast("Look around to find the object!");
+            //mOverlayView.show3DToast("Look around to find the object!");
         }
         // Always give user feedback
         mVibrator.vibrate(50);
     }
 
-    /**
-     * Find a new random position for the object.
-     * We'll rotate it around the Y-axis so it's out of sight, and then up or down by a little bit.
-     */
-    private void hideObject() {
-        float[] rotationMatrix = new float[16];
-        float[] posVec = new float[4];
-
-        // First rotate in XZ plane, between 90 and 270 deg away, and scale so that we vary
-        // the object's distance from the user.
-        float angleXZ = (float) Math.random() * 180 + 90;
-        Matrix.setRotateM(rotationMatrix, 0, angleXZ, 0f, 1f, 0f);
-        float oldObjectDistance = mObjectDistance;
-        mObjectDistance = (float) Math.random() * 15 + 5;
-        float objectScalingFactor = mObjectDistance / oldObjectDistance;
-        Matrix.scaleM(rotationMatrix, 0, objectScalingFactor, objectScalingFactor, objectScalingFactor);
-        Matrix.multiplyMV(posVec, 0, rotationMatrix, 0, mModelCube, 12);
-
-        // Now get the up or down angle, between -20 and 20 degrees
-        float angleY = (float) Math.random() * 80 - 40; // angle in Y plane, between -40 and 40
-        angleY = (float) Math.toRadians(angleY);
-        float newY = (float)Math.tan(angleY) * mObjectDistance;
-
-        Matrix.setIdentityM(mModelCube, 0);
-        Matrix.translateM(mModelCube, 0, posVec[0], newY, posVec[2]);
-    }
+    
 
     /**
      * Check if user is looking at object by calculating where the object is in eye-space.
